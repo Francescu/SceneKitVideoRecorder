@@ -43,14 +43,14 @@ struct VideoTrim {
 
       let composition = AVMutableComposition()
 
-      guard let assetVideoTrack: AVAssetTrack = asset.tracks(withMediaType: AVMediaTypeVideo).first else { return }
-      let assetAudioTrack: AVAssetTrack? = asset.tracks(withMediaType: AVMediaTypeAudio).first
+        guard let assetVideoTrack: AVAssetTrack = asset.tracks(withMediaType: AVMediaType.video).first else { return }
+        let assetAudioTrack: AVAssetTrack? = asset.tracks(withMediaType: AVMediaType.audio).first
 
 
-      let videoCompTrack = composition.addMutableTrack(withMediaType: AVMediaTypeVideo, preferredTrackID: CMPersistentTrackID())
+        let videoCompTrack = composition.addMutableTrack(withMediaType: AVMediaType.video, preferredTrackID: CMPersistentTrackID())
       var audioCompTrack: AVMutableCompositionTrack?
       if assetAudioTrack != nil {
-       audioCompTrack = composition.addMutableTrack(withMediaType: AVMediaTypeAudio, preferredTrackID: CMPersistentTrackID())
+        audioCompTrack = composition.addMutableTrack(withMediaType: AVMediaType.audio, preferredTrackID: CMPersistentTrackID())
       }
       var accumulatedTime = kCMTimeZero
       for (startTimeForCurrentSlice, endTimeForCurrentSlice) in trimPoints {
@@ -58,7 +58,7 @@ struct VideoTrim {
         let timeRangeForCurrentSlice = CMTimeRangeMake(startTimeForCurrentSlice, durationOfCurrentSlice)
 
         do {
-          try videoCompTrack.insertTimeRange(timeRangeForCurrentSlice, of: assetVideoTrack, at: accumulatedTime)
+            try videoCompTrack?.insertTimeRange(timeRangeForCurrentSlice, of: assetVideoTrack, at: accumulatedTime)
           if assetAudioTrack != nil {
             try audioCompTrack?.insertTimeRange(timeRangeForCurrentSlice, of: assetAudioTrack!, at: accumulatedTime)
           }
@@ -73,7 +73,7 @@ struct VideoTrim {
       guard let exportSession = AVAssetExportSession(asset: composition, presetName: preferredPreset) else { return }
 
       exportSession.outputURL = destinationURL
-      exportSession.outputFileType = AVFileTypeAppleM4V
+        exportSession.outputFileType = AVFileType.m4v
       exportSession.shouldOptimizeForNetworkUse = true
 
       removeFileAtURLIfExists(url: destinationURL as URL)
