@@ -276,13 +276,14 @@ public class SceneKitVideoRecorder: NSObject, AVCaptureAudioDataOutputSampleBuff
   @objc private func updateDisplayLink() {
 
     frameQueue.async { [weak self] in
-      print("in")
-      guard let input = self?.videoInput, input.isReadyForMoreMediaData else { print("fail"); return }
-      print("out")
+      
+      if self?.writer.status == .unknown { return }
+      if self?.writer.status == .failed { return }
+      guard let input = self?.videoInput, input.isReadyForMoreMediaData else { return }
 
       if !(self?.isSourceTimeSpecified)! {
-        let startTime = (self?.getAppendTime())!
-        self?.writer.startSession(atSourceTime: startTime)
+        guard let time = self?.getAppendTime(), CMTIME_IS_NUMERIC(time) else { return }
+        self?.writer.startSession(atSourceTime: (self?.getAppendTime())!)
         self?.isSourceTimeSpecified = true
       }
 
@@ -310,11 +311,6 @@ public class SceneKitVideoRecorder: NSObject, AVCaptureAudioDataOutputSampleBuff
 
   private func renderSnapshot() {
 
-    if writer.status == .unknown { return }
-    if writer.status == .failed {
-      self.prepare()
-    }
-
     autoreleasepool {
 
       let time = CACurrentMediaTime()
@@ -328,15 +324,23 @@ public class SceneKitVideoRecorder: NSObject, AVCaptureAudioDataOutputSampleBuff
 
       guard let pixelBuffer = pixelBufferTemp else { return }
 
+      let currentTime = getCurrentCMTime()
+
+      guard CMTIME_IS_VALID(currentTime) else { return }
+
+      let appendTime = getAppendTime()
+
+      guard CMTIME_IS_VALID(appendTime) else { return }
+
       SceneKitVideoRecorder.bufferAppendSemaphore.wait()
 
       bufferQueue.async { [weak self] in
         if self?.videoFramesWritten == false {
           self?.videoFramesWritten = true
-          self?.firstVideoTimestamp = (self?.getCurrentCMTime())!
+          self?.firstVideoTimestamp = currentTime
         }
 
-        self?.pixelBufferAdaptor.append(pixelBuffer, withPresentationTime: (self?.getAppendTime())!)
+        self?.pixelBufferAdaptor.append(pixelBuffer, withPresentationTime: appendTime)
         SceneKitVideoRecorder.bufferAppendSemaphore.signal()
       }
     }
