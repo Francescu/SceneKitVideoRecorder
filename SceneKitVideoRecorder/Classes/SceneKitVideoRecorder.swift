@@ -98,18 +98,20 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
     self.setupVideo()
   }
 
-  @discardableResult public func cleanUp() -> URL {
+  @discardableResult public func cleanUp() -> [URL] {
 
-    var output = options.outputUrl
+    var output: [URL] = options.exports.map { $0.outputUrl }
 
     if options.deleteFileIfExists {
-      let nameOnly = (options.outputUrl.lastPathComponent as NSString).deletingPathExtension
-      let fileExt  = (options.outputUrl.lastPathComponent as NSString).pathExtension
-      let tempFileName = NSTemporaryDirectory() + nameOnly + "TMP." + fileExt
-      output = URL(fileURLWithPath: tempFileName)
-
-      FileController.move(from: options.outputUrl, to: output)
-
+        output = output.map { (initialOutputUrl: URL) -> URL in
+            let nameOnly = (initialOutputUrl.lastPathComponent as NSString).deletingPathExtension
+            let fileExt  = (initialOutputUrl.lastPathComponent as NSString).pathExtension
+            let tempFileName = NSTemporaryDirectory() + nameOnly + "TMP." + fileExt
+            let newOutputUrl = URL(fileURLWithPath: tempFileName)
+            
+            FileController.move(from: initialOutputUrl, to: newOutputUrl)
+            return newOutputUrl
+        }
       FileController.delete(file: self.options.audioOnlyUrl)
       FileController.delete(file: self.options.videoOnlyUrl)
     }
@@ -192,9 +194,9 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
     return promise.future
   }
 
-  public func finishWriting() -> Future<URL, NSError> {
+  public func finishWriting() -> Future<[URL], NSError> {
 
-    let promise = Promise<URL, NSError>()
+    let promise = Promise<[URL], NSError>()
     guard isRecording, writer.status == .writing else {
       let error = NSError(domain: errorDomain, code: ErrorCode.notReady.rawValue, userInfo: nil)
       promise.failure(error)
@@ -219,8 +221,7 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
 
       this.stopDisplayLink()
 
-      if this.useAudio {
-        this.mergeVideoAndAudio(videoUrl: this.options.videoOnlyUrl, audioUrl: this.options.audioOnlyUrl).onSuccess {
+        this.mergeVideoAndAudio(videoUrl: this.options.videoOnlyUrl, audioUrl: this.options.audioOnlyUrl).onSuccess { _ in
           let outputUrl = this.cleanUp()
           promise.success(outputUrl)
         }
@@ -228,11 +229,7 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
           this.cleanUp()
           promise.failure(error)
         }
-      } else {
-        FileController.move(from: this.options.videoOnlyUrl, to: this.options.outputUrl)
-        let outputUrl = this.cleanUp()
-        promise.success(outputUrl)
-      }
+
 
       this.prepare()
     }
@@ -321,74 +318,84 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
 
   }
 
-  private func mergeVideoAndAudio(videoUrl:URL, audioUrl:URL) -> Future<Void, NSError>
+  private func mergeVideoAndAudio(videoUrl:URL, audioUrl:URL) -> Future<[Void], NSError>
   {
-    let promise = Promise<Void, NSError>()
+    let promise = Promise<[Void], NSError>()
 
     let mixComposition : AVMutableComposition = AVMutableComposition()
     var mutableCompositionVideoTrack : [AVMutableCompositionTrack] = []
-    var mutableCompositionAudioTrack : [AVMutableCompositionTrack] = []
     let totalVideoCompositionInstruction : AVMutableVideoCompositionInstruction = AVMutableVideoCompositionInstruction()
 
     let aVideoAsset : AVAsset = AVAsset(url: videoUrl)
-    let aAudioAsset : AVAsset = AVAsset(url: audioUrl)
 
-//<<<<<<< HEAD
-//    mutableCompositionVideoTrack.append(mixComposition.addMutableTrack(withMediaType: AVMediaType.video, preferredTrackID: kCMPersistentTrackID_Invalid)!)
-//    mutableCompositionAudioTrack.append( mixComposition.addMutableTrack(withMediaType: AVMediaType.audio, preferredTrackID: kCMPersistentTrackID_Invalid)!)
-//=======
     mutableCompositionVideoTrack.append(mixComposition.addMutableTrack(withMediaType: AVMediaType.video, preferredTrackID: kCMPersistentTrackID_Invalid)!)
-    mutableCompositionAudioTrack.append(mixComposition.addMutableTrack(withMediaType: AVMediaType.audio, preferredTrackID: kCMPersistentTrackID_Invalid)!)
 
-    guard !aVideoAsset.tracks.isEmpty, !aAudioAsset.tracks.isEmpty else {
+    guard !aVideoAsset.tracks.isEmpty else {
       let error = NSError(domain: errorDomain, code: ErrorCode.zeroFrames.rawValue, userInfo: nil)
       promise.failure(error)
       return promise.future
     }
 
     let aVideoAssetTrack : AVAssetTrack = aVideoAsset.tracks(withMediaType: AVMediaType.video)[0]
-    let aAudioAssetTrack : AVAssetTrack = aAudioAsset.tracks(withMediaType: AVMediaType.audio)[0]
 
     do {
       try mutableCompositionVideoTrack[0].insertTimeRange(CMTimeRangeMake(kCMTimeZero, aVideoAssetTrack.timeRange.duration), of: aVideoAssetTrack, at: kCMTimeZero)
-      try mutableCompositionAudioTrack[0].insertTimeRange(CMTimeRangeMake(kCMTimeZero, aVideoAssetTrack.timeRange.duration), of: aAudioAssetTrack, at: kCMTimeZero)
     } catch {
 
     }
-
-    totalVideoCompositionInstruction.timeRange = CMTimeRangeMake(kCMTimeZero,aVideoAssetTrack.timeRange.duration )
-
-    let mutableVideoComposition : AVMutableVideoComposition = AVMutableVideoComposition()
-    mutableVideoComposition.frameDuration = CMTimeMake(1, Int32(self.options.fps))
-
-    mutableVideoComposition.renderSize = self.options.videoSize
-
-    let savePathUrl : URL = self.options.outputUrl
-
-    let assetExport: AVAssetExportSession = AVAssetExportSession(asset: mixComposition, presetName: AVAssetExportPresetHighestQuality)!
-    assetExport.outputFileType = AVFileType.mp4
-    assetExport.outputURL = savePathUrl
-    assetExport.shouldOptimizeForNetworkUse = true
-
-    assetExport.exportAsynchronously { () -> Void in
-      switch assetExport.status {
-
-      case AVAssetExportSessionStatus.completed:
-        promise.success(())
-      case  AVAssetExportSessionStatus.failed:
-        let assetExportErrorMessage = "failed \(String(describing: assetExport.error))"
-        let error = NSError(domain: self.errorDomain, code: ErrorCode.assetExport.rawValue, userInfo: ["Reason": assetExportErrorMessage])
-        promise.failure(error)
-      case AVAssetExportSessionStatus.cancelled:
-        let assetExportErrorMessage = "cancelled \(String(describing: assetExport.error))"
-        let error = NSError(domain: self.errorDomain, code: ErrorCode.assetExport.rawValue, userInfo: ["Reason": assetExportErrorMessage])
-        promise.failure(error)
-      default:
-        promise.success(())
-      }
+    
+    if self.useAudio == true {
+        var mutableCompositionAudioTrack : [AVMutableCompositionTrack] = []
+        let aAudioAsset : AVAsset = AVAsset(url: audioUrl)
+    
+        mutableCompositionAudioTrack.append(mixComposition.addMutableTrack(withMediaType: AVMediaType.audio, preferredTrackID: kCMPersistentTrackID_Invalid)!)
+        
+        guard !aAudioAsset.tracks.isEmpty else {
+            let error = NSError(domain: errorDomain, code: ErrorCode.zeroFrames.rawValue, userInfo: nil)
+            promise.failure(error)
+            return promise.future
+        }
+        
+        let aAudioAssetTrack : AVAssetTrack = aAudioAsset.tracks(withMediaType: AVMediaType.audio)[0]
+        
+        do {
+            try mutableCompositionAudioTrack[0].insertTimeRange(CMTimeRangeMake(kCMTimeZero, aVideoAssetTrack.timeRange.duration), of: aAudioAssetTrack, at: kCMTimeZero)
+        } catch {
+            
+        }
     }
+    totalVideoCompositionInstruction.timeRange = CMTimeRangeMake(kCMTimeZero,aVideoAssetTrack.timeRange.duration)
 
-    return promise.future
+    
+    return self.options.exports.map { self.export(composition: mixComposition, with: $0) }.sequence()
   }
 
+    func export(composition: AVComposition, with settings: Options.Export) -> Future<Void, NSError> {
+        let promise = Promise<Void, NSError>()
+        let savePathUrl : URL = settings.outputUrl
+        
+        let assetExport: AVAssetExportSession = AVAssetExportSession(asset: composition, presetName: settings.presetName)!
+        assetExport.outputFileType = AVFileType.mp4
+        assetExport.outputURL = savePathUrl
+        assetExport.shouldOptimizeForNetworkUse = true
+        
+        assetExport.exportAsynchronously { () -> Void in
+            switch assetExport.status {
+                
+            case AVAssetExportSessionStatus.completed:
+                promise.success(())
+            case  AVAssetExportSessionStatus.failed:
+                let assetExportErrorMessage = "failed \(String(describing: assetExport.error))"
+                let error = NSError(domain: self.errorDomain, code: ErrorCode.assetExport.rawValue, userInfo: ["Reason": assetExportErrorMessage])
+                promise.failure(error)
+            case AVAssetExportSessionStatus.cancelled:
+                let assetExportErrorMessage = "cancelled \(String(describing: assetExport.error))"
+                let error = NSError(domain: self.errorDomain, code: ErrorCode.assetExport.rawValue, userInfo: ["Reason": assetExportErrorMessage])
+                promise.failure(error)
+            default:
+                promise.success(())
+            }
+        }
+        return promise.future
+    }
 }

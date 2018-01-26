@@ -10,14 +10,25 @@ import AVFoundation
 
 extension SceneKitVideoRecorder {
   public struct Options {
+    
+    public struct Export {
+        public var outputUrl: URL
+        public var presetName: String
+        
+        public init(outputUrl: URL, presetName: String) {
+            self.outputUrl = outputUrl
+            self.presetName = presetName
+        }
+    }
+    
     public var timeScale: Int32
     public var videoSize: CGSize
     public var fps: Int
-    public var outputUrl: URL
     public var audioOnlyUrl: URL
     public var videoOnlyUrl: URL
     public var fileType: String
     public var codec: String
+    public var exports: [Export]
     public var deleteFileIfExists: Bool
     public var useMicrophone: Bool
     public var antialiasingMode: SCNAntialiasingMode
@@ -26,11 +37,11 @@ extension SceneKitVideoRecorder {
       return Options(timeScale: 1000,
                      videoSize: CGSize(width: 720, height: 1280),
                      fps: 60,
-                     outputUrl: URL(fileURLWithPath: NSTemporaryDirectory() + "output.mp4"),
                      audioOnlyUrl: URL(fileURLWithPath: NSTemporaryDirectory() + "audio.m4a"),
                      videoOnlyUrl: URL(fileURLWithPath: NSTemporaryDirectory() + "video.mp4"),
                      fileType: AVFileType.m4v.rawValue,
                      codec: AVVideoCodecH264,
+                     exports: [Export(outputUrl: URL(fileURLWithPath: NSTemporaryDirectory() + "output.mp4"), presetName: AVAssetExportPresetHighestQuality)],
                      deleteFileIfExists: true,
                      useMicrophone: true,
                      antialiasingMode: .multisampling4X)
