@@ -152,6 +152,7 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
       audioRecorder.record()
 
     } catch {
+      print("Recorder – Audio Failed")
       finishRecordingAudio(success: false)
     }
   }
@@ -283,13 +284,13 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
 
       updateFrameHandler?(image)
 
-      guard let pool = self.pixelBufferAdaptor.pixelBufferPool else { print("No pool"); return }
+      guard let pool = self.pixelBufferAdaptor.pixelBufferPool else { print("Recorder – No pool"); return }
 
       let pixelBufferTemp = PixelBufferFactory.make(with: image, usingBuffer: pool)
 
-      guard let pixelBuffer = pixelBufferTemp else { print("No buffer"); return }
+      guard let pixelBuffer = pixelBufferTemp else { print("Recorder – No buffer"); return }
 
-      guard videoInput.isReadyForMoreMediaData else { print("No ready for media data"); return }
+      guard videoInput.isReadyForMoreMediaData else { print("Recorder – No ready for media data"); return }
 
       if videoFramesWritten == false {
         videoFramesWritten = true
@@ -299,11 +300,11 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
 
       let currentTime = getCurrentCMTime()
 
-      guard CMTIME_IS_VALID(currentTime) else { print("No current time"); return }
+      guard CMTIME_IS_VALID(currentTime) else { print("Recorder – No current time"); return }
 
       let appendTime = getAppendTime()
 
-      guard CMTIME_IS_VALID(appendTime) else { print("No append time"); return }
+      guard CMTIME_IS_VALID(appendTime) else { print("Recorder – No append time"); return }
 
       bufferQueue.async { [weak self] in
         self?.pixelBufferAdaptor.append(pixelBuffer, withPresentationTime: appendTime)
@@ -318,8 +319,7 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
 
   }
 
-  private func mergeVideoAndAudio(videoUrl:URL, audioUrl:URL) -> Future<[Void], NSError>
-  {
+  private func mergeVideoAndAudio(videoUrl:URL, audioUrl:URL) -> Future<[Void], NSError> {
     let promise = Promise<[Void], NSError>()
 
     let mixComposition : AVMutableComposition = AVMutableComposition()
@@ -331,6 +331,7 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
     mutableCompositionVideoTrack.append(mixComposition.addMutableTrack(withMediaType: AVMediaType.video, preferredTrackID: kCMPersistentTrackID_Invalid)!)
 
     guard !aVideoAsset.tracks.isEmpty else {
+        print("Recorder – aVideoAsset empty")
       let error = NSError(domain: errorDomain, code: ErrorCode.zeroFrames.rawValue, userInfo: nil)
       promise.failure(error)
       return promise.future
