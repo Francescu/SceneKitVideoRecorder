@@ -150,7 +150,7 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
       audioRecorder = try AVAudioRecorder(url: audioUrl, settings: settings)
       audioRecorder.delegate = self
       audioRecorder.record()
-
+      
     } catch {
       print("Recorder – Audio Failed")
       finishRecordingAudio(success: false)
@@ -346,24 +346,25 @@ public class SceneKitVideoRecorder: NSObject, AVAudioRecorderDelegate {
     }
     
     if self.useAudio == true {
-        var mutableCompositionAudioTrack : [AVMutableCompositionTrack] = []
-        let aAudioAsset : AVAsset = AVAsset(url: audioUrl)
-    
-        mutableCompositionAudioTrack.append(mixComposition.addMutableTrack(withMediaType: AVMediaType.audio, preferredTrackID: kCMPersistentTrackID_Invalid)!)
-        
-        guard !aAudioAsset.tracks.isEmpty else {
-            let error = NSError(domain: errorDomain, code: ErrorCode.zeroFrames.rawValue, userInfo: nil)
-            promise.failure(error)
-            return promise.future
-        }
+      var mutableCompositionAudioTrack : [AVMutableCompositionTrack] = []
+      let aAudioAsset : AVAsset = AVAsset(url: audioUrl)
+      
+      mutableCompositionAudioTrack.append(mixComposition.addMutableTrack(withMediaType: AVMediaType.audio, preferredTrackID: kCMPersistentTrackID_Invalid)!)
+      
+      if !aAudioAsset.tracks.isEmpty {
         
         let aAudioAssetTrack : AVAssetTrack = aAudioAsset.tracks(withMediaType: AVMediaType.audio)[0]
         
         do {
-            try mutableCompositionAudioTrack[0].insertTimeRange(CMTimeRangeMake(kCMTimeZero, aVideoAssetTrack.timeRange.duration), of: aAudioAssetTrack, at: kCMTimeZero)
+          try mutableCompositionAudioTrack[0].insertTimeRange(CMTimeRangeMake(kCMTimeZero, aVideoAssetTrack.timeRange.duration), of: aAudioAssetTrack, at: kCMTimeZero)
         } catch {
-            
+          
         }
+      }
+      else {
+        print("Recorder – AudioAsset empty")
+      }
+        
     }
     totalVideoCompositionInstruction.timeRange = CMTimeRangeMake(kCMTimeZero,aVideoAssetTrack.timeRange.duration)
 
